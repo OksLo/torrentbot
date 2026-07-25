@@ -19,7 +19,7 @@ make up            # start all services detached
 make down          # stop all services
 make logs          # tail all logs
 make bot-logs      # tail bot logs only
-make rebuild-bot   # rebuild and restart the bot container
+make restart-bot   # restart the bot container
 ```
 
 First-time setup:
@@ -29,6 +29,17 @@ make up
 ```
 
 qBittorrent Web UI is at `http://localhost:8080`. Jellyfin is at `http://localhost:8096`.
+
+## Setup Service
+
+The `setup` service is published to GitHub Container Registry as `ghcr.io/okslo/torrentbot-setup:latest`. On first boot, it:
+
+1. Connects to qBittorrent and Jellyfin (waits for healthchecks)
+2. Sets the qBittorrent Web UI password
+3. Completes the Jellyfin wizard and creates the admin account
+4. Adds a Downloads library pointing to `/downloads`
+5. Configures qBittorrent autorun to refresh Jellyfin on torrent completion
+6. Writes a sentinel file (`/config/.setup_done`) to skip on future starts
 
 ## Architecture
 
@@ -41,6 +52,10 @@ bot/
     status.py          # /status and /help commands
   services/
     qbittorrent.py     # async httpx client for qBittorrent Web API v2
+
+setup/
+  Dockerfile           # containerizes setup.py for GHCR publication
+  setup.py             # first-run configuration script (idempotent)
 ```
 
 The bot is stateless — it holds no download state itself, everything lives in qBittorrent. `QBittorrentClient` in `services/qbittorrent.py` is a module-level singleton that lazily authenticates on first use.

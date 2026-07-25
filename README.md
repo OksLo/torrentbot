@@ -69,7 +69,7 @@ make up           # start all services (runs first-time setup automatically)
 make down         # stop all services
 make logs         # tail logs for all services
 make bot-logs     # tail bot logs only
-make rebuild-bot  # rebuild and restart the bot after code changes
+make restart-bot  # restart the bot container
 ```
 
 ## Connecting via SMB

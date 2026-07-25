@@ -69,10 +69,9 @@ services:
     restart: unless-stopped
 
   setup:
-    image: python:3-alpine
+    image: ghcr.io/okslo/torrentbot-setup:latest
     container_name: setup
     volumes:
-      - ./setup.py:/setup.py:ro
       - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -85,5 +84,4 @@ services:
         condition: service_healthy
       jellyfin:
         condition: service_healthy
-    command: python3 /setup.py
     restart: "no"
