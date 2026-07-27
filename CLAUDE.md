@@ -37,7 +37,7 @@ The `setup` service is published to GitHub Container Registry as `ghcr.io/okslo/
 1. Connects to qBittorrent and Jellyfin (waits for healthchecks)
 2. Sets the qBittorrent Web UI password
 3. Completes the Jellyfin wizard and creates the admin account
-4. Adds a Downloads library pointing to `/downloads`
+4. Adds a Downloads library pointing to `/media`
 5. Configures qBittorrent autorun to refresh Jellyfin on torrent completion
 6. Writes a sentinel file (`/config/.setup_done`) to skip on future starts
 
