@@ -31,11 +31,56 @@ services:
       - QBIT_USERNAME=${QBIT_USERNAME:-admin}
       - QBIT_PASSWORD=${QBIT_PASSWORD}
       - DOWNLOAD_PATH=/downloads
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - QBIT_MCP_URL=http://qbittorrent-mcp:3000/sse
+      - JELLYFIN_MCP_URL=http://jellyfin-mcp:8080/mcp
+      - MCP_HTTP_TOKEN=${MCP_HTTP_TOKEN}
     volumes:
       - ./downloads:/downloads
+      - ./data:/data
     depends_on:
       - qbittorrent
+      - qbittorrent-mcp
+      - jellyfin-mcp
     restart: unless-stopped
+
+  qbittorrent-mcp:
+    image: ghcr.io/nicholaswilde/qbittorrent-mcp-rs:latest
+    container_name: qbittorrent-mcp
+    environment:
+      - QBITTORRENT_HOST=http://qbittorrent:8080
+      - QBITTORRENT_USERNAME=${QBIT_USERNAME:-admin}
+      - QBITTORRENT_PASSWORD=${QBIT_PASSWORD}
+      - QBITTORRENT_SERVER_MODE=http
+    ports:
+      - "3000:3000"
+    depends_on:
+      qbittorrent:
+        condition: service_healthy
+    restart: unless-stopped
+
+  jellyfin-mcp:
+    image: ghcr.io/jaredtrent/jellyfin-mcp:latest
+    container_name: jellyfin-mcp
+    env_file:
+      - path: ./config/jellyfin.env
+        required: false
+    environment:
+      JELLYFIN_URL: "http://jellyfin:8096"
+    command: ["--http", "--addr", "0.0.0.0:8080", "--http-token", "${MCP_HTTP_TOKEN}"]
+    ports:
+      - "8081:8080"
+    depends_on:
+      jellyfin:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   samba:
     image: dperson/samba:latest
