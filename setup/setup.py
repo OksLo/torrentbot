@@ -302,7 +302,9 @@ def setup_jellyfin():
                 None,
             )
     if api_key:
-        print('  Jellyfin API key ready.')
+        with open('/config/jellyfin.env', 'w') as f:
+            f.write(f'JELLYFIN_API_KEY={api_key}\n')
+        print('  Jellyfin API key written to /config/jellyfin.env.')
     else:
         print('  WARN: Could not create Jellyfin API key.')
     return api_key
