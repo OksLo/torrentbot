@@ -52,17 +52,17 @@ async def main():
                         await jf_sess.initialize()
                         ai.jellyfin_session = jf_sess
 
-                    qbit_tools = (await qbit_sess.list_tools()).tools
-                    jf_tools = (await jf_sess.list_tools()).tools
-                    logger.info("qBit MCP tools: %s", [t.name for t in qbit_tools])
-                    logger.info("Jellyfin MCP tools: %s", [t.name for t in jf_tools])
+                        qbit_tools = (await qbit_sess.list_tools()).tools
+                        jf_tools = (await jf_sess.list_tools()).tools
+                        logger.info("qBit MCP tools: %s", [t.name for t in qbit_tools])
+                        logger.info("Jellyfin MCP tools: %s", [t.name for t in jf_tools])
 
-                    ai.tool_to_session = {t.name: qbit_sess for t in qbit_tools}
-                    ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
-                    ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
+                        ai.tool_to_session = {t.name: qbit_sess for t in qbit_tools}
+                        ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
+                        ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
 
-                    dp.include_router(ai.router)
-                    await dp.start_polling(bot)
+                        dp.include_router(ai.router)
+                        await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
