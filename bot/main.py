@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+import httpx2
 from aiogram import Bot, Dispatcher
 from google import genai
 from google.genai import types
@@ -40,13 +41,16 @@ async def main():
             await qbit_sess.initialize()
             ai.qbit_session = qbit_sess
 
-            async with streamable_http_client(
-                settings.jellyfin_mcp_url,
+            async with httpx2.AsyncClient(
                 headers={"Authorization": f"Bearer {settings.mcp_http_token}"},
-            ) as (jf_read, jf_write, _):
-                async with ClientSession(jf_read, jf_write) as jf_sess:
-                    await jf_sess.initialize()
-                    ai.jellyfin_session = jf_sess
+            ) as jf_http_client:
+                async with streamable_http_client(
+                    settings.jellyfin_mcp_url,
+                    http_client=jf_http_client,
+                ) as (jf_read, jf_write):
+                    async with ClientSession(jf_read, jf_write) as jf_sess:
+                        await jf_sess.initialize()
+                        ai.jellyfin_session = jf_sess
 
                     qbit_tools = (await qbit_sess.list_tools()).tools
                     jf_tools = (await jf_sess.list_tools()).tools
