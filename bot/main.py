@@ -17,6 +17,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+_GEMINI_SCHEMA_KEYS = {"type", "format", "description", "nullable", "enum", "properties", "required", "items"}
+
+
+def _sanitize_schema(schema: dict) -> dict:
+    if not isinstance(schema, dict):
+        return schema
+    result = {}
+    for k, v in schema.items():
+        if k not in _GEMINI_SCHEMA_KEYS:
+            continue
+        if k == "type" and isinstance(v, list):
+            non_null = [t for t in v if t != "null"]
+            result[k] = non_null[0] if non_null else "string"
+        elif k == "properties" and isinstance(v, dict):
+            # values are property-name → schema maps, not schema keyword dicts
+            result[k] = {name: _sanitize_schema(prop_schema) for name, prop_schema in v.items()}
+        elif isinstance(v, dict):
+            result[k] = _sanitize_schema(v)
+        elif isinstance(v, list):
+            result[k] = [_sanitize_schema(i) if isinstance(i, dict) else i for i in v]
+        else:
+            result[k] = v
+    return result
+
+
 def _build_gemini_tools(mcp_tools) -> list:
     decls = []
     for t in mcp_tools:
@@ -26,7 +51,7 @@ def _build_gemini_tools(mcp_tools) -> list:
         decls.append(types.FunctionDeclaration(
             name=t.name,
             description=t.description or "",
-            parameters=schema,
+            parameters=_sanitize_schema(schema),
         ))
     return [types.Tool(function_declarations=decls)] if decls else []
 

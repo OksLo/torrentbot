@@ -32,6 +32,7 @@ services:
       - QBIT_PASSWORD=${QBIT_PASSWORD}
       - DOWNLOAD_PATH=/downloads
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
       - QBIT_MCP_URL=http://qbittorrent-mcp:3000/sse
       - JELLYFIN_MCP_URL=http://jellyfin-mcp:8080/mcp
       - MCP_HTTP_TOKEN=${MCP_HTTP_TOKEN}
@@ -48,9 +49,10 @@ services:
     image: ghcr.io/nicholaswilde/qbittorrent-mcp-rs:latest
     container_name: qbittorrent-mcp
     environment:
-      - QBITTORRENT_HOST=http://qbittorrent:8080
-      - QBITTORRENT_USERNAME=${QBIT_USERNAME:-admin}
-      - QBITTORRENT_PASSWORD=${QBIT_PASSWORD}
+      - QBITTORRENT_QBITTORRENT_HOST=qbittorrent
+      - QBITTORRENT_QBITTORRENT_PORT=8080
+      - QBITTORRENT_QBITTORRENT_USERNAME=${QBIT_USERNAME:-admin}
+      - QBITTORRENT_QBITTORRENT_PASSWORD=${QBIT_PASSWORD}
       - QBITTORRENT_SERVER_MODE=http
     ports:
       - "3000:3000"
