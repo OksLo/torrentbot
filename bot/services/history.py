@@ -58,7 +58,14 @@ def load_history(chat_id: int) -> list:
                 "SELECT role, parts FROM chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT 40",
                 (chat_id,),
             ).fetchall()
-        return [types.Content(role=row[0], parts=_json_to_parts(row[1])) for row in reversed(rows)]
+        hist = [types.Content(role=row[0], parts=_json_to_parts(row[1])) for row in reversed(rows)]
+        # trim trailing incomplete tool-call cycles (bot may have been killed mid-loop)
+        while hist and any(
+            p.function_call is not None or p.function_response is not None
+            for p in hist[-1].parts
+        ):
+            hist.pop()
+        return hist
     except Exception:
         return []
 

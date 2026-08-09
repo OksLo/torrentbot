@@ -62,34 +62,41 @@ async def main():
 
     history.init_db(settings.history_db_path)
     ai.gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    dp.include_router(ai.router)
 
-    async with sse_client(settings.qbit_mcp_url) as (qbit_read, qbit_write):
-        async with ClientSession(qbit_read, qbit_write) as qbit_sess:
-            await qbit_sess.initialize()
-            ai.qbit_session = qbit_sess
+    while True:
+        try:
+            async with sse_client(settings.qbit_mcp_url) as (qbit_read, qbit_write):
+                async with ClientSession(qbit_read, qbit_write) as qbit_sess:
+                    await qbit_sess.initialize()
+                    ai.qbit_session = qbit_sess
 
-            async with httpx2.AsyncClient(
-                headers={"Authorization": f"Bearer {settings.mcp_http_token}"},
-            ) as jf_http_client:
-                async with streamable_http_client(
-                    settings.jellyfin_mcp_url,
-                    http_client=jf_http_client,
-                ) as (jf_read, jf_write):
-                    async with ClientSession(jf_read, jf_write) as jf_sess:
-                        await jf_sess.initialize()
-                        ai.jellyfin_session = jf_sess
+                    async with httpx2.AsyncClient(
+                        headers={"Authorization": f"Bearer {settings.mcp_http_token}"},
+                    ) as jf_http_client:
+                        async with streamable_http_client(
+                            settings.jellyfin_mcp_url,
+                            http_client=jf_http_client,
+                        ) as (jf_read, jf_write):
+                            async with ClientSession(jf_read, jf_write) as jf_sess:
+                                await jf_sess.initialize()
+                                ai.jellyfin_session = jf_sess
 
-                        qbit_tools = (await qbit_sess.list_tools()).tools
-                        jf_tools = (await jf_sess.list_tools()).tools
-                        logger.info("qBit MCP tools: %s", [t.name for t in qbit_tools])
-                        logger.info("Jellyfin MCP tools: %s", [t.name for t in jf_tools])
+                                qbit_tools = (await qbit_sess.list_tools()).tools
+                                jf_tools = (await jf_sess.list_tools()).tools
+                                logger.info("qBit MCP tools: %s", [t.name for t in qbit_tools])
+                                logger.info("Jellyfin MCP tools: %s", [t.name for t in jf_tools])
 
-                        ai.tool_to_session = {t.name: qbit_sess for t in qbit_tools}
-                        ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
-                        ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
+                                ai.tool_to_session = {t.name: qbit_sess for t in qbit_tools}
+                                ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
+                                ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
 
-                        dp.include_router(ai.router)
-                        await dp.start_polling(bot)
+                                await dp.start_polling(bot)
+        except Exception:
+            logger.exception("MCP connection lost, reconnecting in 5s...")
+            ai.all_tools = []
+            ai.tool_to_session = {}
+            await asyncio.sleep(5)
 
 
 if __name__ == "__main__":

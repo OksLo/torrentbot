@@ -16,7 +16,20 @@ logger = logging.getLogger(__name__)
 _SYSTEM = (
     "You are a helpful assistant for a self-hosted media server. "
     "You can manage torrents via qBittorrent and browse/search media via Jellyfin. "
-    "Be concise. When asked about downloads or media, use your available tools."
+    "Be concise. When asked about downloads or media, use your available tools.\n\n"
+    "Format ALL responses as Telegram HTML (parse_mode=HTML). Supported tags only:\n"
+    "- <b>bold</b> for labels, headings, torrent/media names\n"
+    "- <i>italic</i> for secondary info, dates, status\n"
+    "- <code>inline code</code> for hashes, IDs, paths\n"
+    "- <pre>preformatted block</pre> for tabular data — use fixed-width columns "
+    "padded with spaces, e.g.:\n"
+    "<pre>\n"
+    "Name               Size    Progress  State\n"
+    "Movie 2024         10.2GB  100%      Seeding\n"
+    "Series S01E01      4.5GB    60%      Downloading\n"
+    "</pre>\n"
+    "Always escape & as &amp;, < as &lt;, > as &gt; in plain text content. "
+    "Never use Markdown syntax (* _ ` #). Never use unsupported HTML tags."
 )
 
 gemini_client: genai.Client = None
@@ -47,7 +60,7 @@ async def handle_message(message: Message):
         return
     try:
         reply = await _gemini_loop(message.chat.id, text)
-        await message.reply(reply)
+        await message.reply(reply, parse_mode="HTML")
     except Exception:
         logger.exception("gemini loop failed")
         await message.reply("Something went wrong. Please try again.")
