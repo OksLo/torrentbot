@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 from config import settings
 from handlers import ai
@@ -40,7 +40,7 @@ async def main():
             await qbit_sess.initialize()
             ai.qbit_session = qbit_sess
 
-            async with streamablehttp_client(
+            async with streamable_http_client(
                 settings.jellyfin_mcp_url,
                 headers={"Authorization": f"Bearer {settings.mcp_http_token}"},
             ) as (jf_read, jf_write, _):
