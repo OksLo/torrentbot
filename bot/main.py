@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 def _build_gemini_tools(mcp_tools) -> list:
     decls = []
     for t in mcp_tools:
-        schema = t.inputSchema if t.inputSchema else {"type": "object", "properties": {}}
+        schema = getattr(t, "input_schema", None) or getattr(t, "inputSchema", None)
+        if schema is None:
+            schema = {"type": "object", "properties": {}}
         decls.append(types.FunctionDeclaration(
             name=t.name,
             description=t.description or "",
