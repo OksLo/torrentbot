@@ -12,3 +12,7 @@ bot-logs:
 
 restart-bot:
 	docker compose restart telegram-bot
+
+upgrade:
+	docker compose pull
+	docker compose up -d --force-recreate --remove-orphans

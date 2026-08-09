@@ -70,6 +70,7 @@ make down         # stop all services
 make logs         # tail logs for all services
 make bot-logs     # tail bot logs only
 make restart-bot  # restart the bot container
+make upgrade      # pull latest images and recreate services so setup reruns
 ```
 
 ## Connecting via SMB

@@ -7,8 +7,8 @@ hostnames (qbittorrent, jellyfin) are used instead of localhost.
 The Docker socket is mounted read-only to read qBittorrent's temporary password
 from container logs without needing the docker CLI binary.
 
-A sentinel file (SENTINEL) is written on successful completion so the script
-becomes a no-op on every subsequent `docker compose up`.
+The script is idempotent and verifies required setup on every compose start,
+so upgrades and container recreation can reapply needed configuration.
 """
 
 import http.client
@@ -22,7 +22,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# Written on first successful run; presence skips all setup on future starts.
+# Written on successful setup to aid diagnostics. The script does not skip
+# future starts based on this file alone, because upgrades and reconfiguration
+# may still require rerunning setup tasks.
 SENTINEL = '/config/.setup_done'
 
 QBIT_URL = 'http://qbittorrent:8080'
@@ -351,10 +353,8 @@ def setup_autorun(api_key):
 
 
 if __name__ == '__main__':
-    # Skip everything if a previous run already completed successfully.
     if os.path.exists(SENTINEL):
-        print('Setup already completed, skipping.')
-        sys.exit(0)
+        print('Setup previously completed; verifying configuration and reapplying if needed.')
 
     setup_qbittorrent()
     api_key = setup_jellyfin()
