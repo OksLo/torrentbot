@@ -40,13 +40,28 @@ jobs:
             # 'latest' only on the default branch
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: ./setup
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # cache layers in the GitHub Actions cache to speed up rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Run container smoke tests
+        run: |
+          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed '/^[[:space:]]*$/d' | head -n1)
+          echo "Testing image: $IMAGE"
+          docker run --rm "$IMAGE" python -m pip check
+          docker run --rm "$IMAGE" python -m py_compile setup.py
+          docker run --rm "$IMAGE" python smoke_test.py
+
+      - name: Push image
+        run: |
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed '/^[[:space:]]*$/d'); do
+            docker push "$tag"
+          done
