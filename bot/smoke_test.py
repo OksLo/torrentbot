@@ -9,6 +9,7 @@ IMPORT_MODULES = [
     "mcp",
     "mcp.client.sse",
     "mcp.client.streamable_http",
+    "mcp.shared.exceptions",
 ]
 
 
