@@ -91,11 +91,30 @@ async def main():
                                 ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
                                 ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
 
-                                await dp.start_polling(bot)
+                                reconnect_needed = asyncio.Event()
+                                ai.reconnect_event = reconnect_needed
+
+                                polling_task = asyncio.create_task(dp.start_polling(bot))
+                                reconnect_task = asyncio.create_task(reconnect_needed.wait())
+                                await asyncio.wait(
+                                    {polling_task, reconnect_task},
+                                    return_when=asyncio.FIRST_COMPLETED,
+                                )
+                                polling_task.cancel()
+                                reconnect_task.cancel()
+                                for t in (polling_task, reconnect_task):
+                                    try:
+                                        await t
+                                    except (asyncio.CancelledError, Exception):
+                                        pass
+
+                                if reconnect_needed.is_set():
+                                    raise RuntimeError("MCP session terminated")
         except Exception:
             logger.exception("MCP connection lost, reconnecting in 5s...")
             ai.all_tools = []
             ai.tool_to_session = {}
+            ai.reconnect_event = None
             await asyncio.sleep(5)
 
 

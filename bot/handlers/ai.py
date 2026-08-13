@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import F, Router
@@ -5,6 +6,7 @@ from aiogram.types import Message
 from google import genai
 from google.genai import types
 from mcp import ClientSession
+from mcp.shared.exceptions import McpError
 
 from config import settings
 from services import history
@@ -37,6 +39,7 @@ qbit_session: ClientSession = None
 jellyfin_session: ClientSession = None
 all_tools: list = []
 tool_to_session: dict[str, ClientSession] = {}
+reconnect_event: asyncio.Event | None = None
 _history_cache: dict[int, list] = {}
 
 
@@ -106,6 +109,11 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
                     result_text = "\n".join(
                         c.text for c in result.content if hasattr(c, "text") and c.text
                     ) or "(no output)"
+                except McpError as e:
+                    logger.exception("MCP tool call failed: %s", fc.name)
+                    if "Session terminated" in str(e) and reconnect_event is not None:
+                        reconnect_event.set()
+                    result_text = f"Tool error: {e}"
                 except Exception as e:
                     logger.exception("MCP tool call failed: %s", fc.name)
                     result_text = f"Tool error: {e}"
