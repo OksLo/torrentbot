@@ -71,9 +71,25 @@ async def handle_message(message: Message):
     try:
         reply = await _gemini_loop(message.chat.id, text)
         await message.reply(reply, parse_mode="HTML")
-    except Exception:
+    except MCPError as e:
         logger.exception("gemini loop failed")
-        await message.reply("Something went wrong. Please try again.")
+        await message.reply(f"Something went wrong [{e.error.code}]: {e.error.message}")
+    except Exception as e:
+        logger.exception("gemini loop failed")
+        await message.reply(f"Something went wrong [{type(e).__name__}]: {e}")
+
+
+async def _generate_with_fallback(contents, config):
+    last_exc = None
+    for model in settings.gemini_models:
+        try:
+            return await gemini_client.aio.models.generate_content(
+                model=model, contents=contents, config=config,
+            )
+        except Exception as e:
+            logger.warning("Model %s failed: %s, trying next", model, e)
+            last_exc = e
+    raise last_exc
 
 
 async def _gemini_loop(chat_id: int, user_text: str) -> str:
@@ -91,11 +107,7 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
     )
 
     while True:
-        response = await gemini_client.aio.models.generate_content(
-            model=settings.gemini_model,
-            contents=hist,
-            config=cfg,
-        )
+        response = await _generate_with_fallback(hist, cfg)
         model_content = response.candidates[0].content
         hist.append(model_content)
         history.append_turn(chat_id, model_content.role, model_content.parts)
@@ -120,10 +132,10 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
                     logger.exception("MCP tool call failed: %s", fc.name)
                     if "Session terminated" in str(e) and reconnect_event is not None:
                         reconnect_event.set()
-                    result_text = f"Tool error: {e}"
+                    result_text = f"Tool error [{e.error.code}]: {e.error.message}"
                 except Exception as e:
                     logger.exception("MCP tool call failed: %s", fc.name)
-                    result_text = f"Tool error: {e}"
+                    result_text = f"Tool error [{type(e).__name__}]: {e}"
             fn_parts.append(types.Part(
                 function_response=types.FunctionResponse(
                     name=fc.name, response={"result": result_text}
