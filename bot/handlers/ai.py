@@ -15,6 +15,20 @@ from services.qbittorrent import qbittorrent
 router = Router()
 logger = logging.getLogger(__name__)
 
+
+async def _safe_reply(message: Message, text: str, **kwargs):
+    try:
+        await message.reply(text, **kwargs)
+    except Exception as e:
+        logger.exception(
+            "failed to send reply to chat_id=%s text_len=%d text_preview=%r error=%s",
+            message.chat.id,
+            len(text),
+            text[:100],
+            e,
+        )
+
+
 _SYSTEM = (
     "You are a helpful assistant for a self-hosted media server. "
     "You can manage torrents via qBittorrent and browse/search media via Jellyfin. "
@@ -33,7 +47,7 @@ _SYSTEM = (
     "</pre>\n"
     "Always escape & as &amp;, < as &lt;, > as &gt; in plain text content. "
     "Never use Markdown syntax (* _ ` #). Never use unsupported HTML tags.\n\n"
-    
+
     "When asked to update the metadata of a movie, find it's IMDb page and use the "
     "IMDb ID to update the metadata via jellyfin_metadata tool. "
     "Update the metadata only if the IMDb ID is found. If not found, respond with 'IMDb ID not found.'."
@@ -52,15 +66,15 @@ _history_cache: dict[int, list] = {}
 
 @router.message(F.document.mime_type == "application/x-bittorrent")
 async def handle_torrent_file(message: Message):
-    await message.reply("Processing .torrent file...")
+    await _safe_reply(message, "Processing .torrent file...")
     try:
         file = await message.bot.get_file(message.document.file_id)
         data = await message.bot.download_file(file.file_path)
         ok = await qbittorrent.add_torrent_file(data.read())
-        await message.reply("Torrent added." if ok else "Failed to add torrent.")
+        await _safe_reply(message, "Torrent added." if ok else "Failed to add torrent.")
     except Exception:
         logger.exception("torrent file upload failed")
-        await message.reply("Failed to upload torrent file.")
+        await _safe_reply(message, "Failed to upload torrent file.")
 
 
 @router.message()
@@ -70,13 +84,13 @@ async def handle_message(message: Message):
         return
     try:
         reply = await _gemini_loop(message.chat.id, text)
-        await message.reply(reply, parse_mode="HTML")
+        await _safe_reply(message, reply, parse_mode="HTML")
     except MCPError as e:
         logger.exception("gemini loop failed")
-        await message.reply(f"Something went wrong [{e.error.code}]: {e.error.message}")
+        await _safe_reply(message, f"Something went wrong [{e.error.code}]: {e.error.message}")
     except Exception as e:
         logger.exception("gemini loop failed")
-        await message.reply(f"Something went wrong [{type(e).__name__}]: {e}")
+        await _safe_reply(message, f"Something went wrong [{type(e).__name__}]: {e}")
 
 
 async def _generate_with_fallback(contents, config):
