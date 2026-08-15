@@ -144,7 +144,7 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
                     ) or "(no output)"
                 except MCPError as e:
                     logger.exception("MCP tool call failed: %s", fc.name)
-                    if "Session terminated" in str(e) and reconnect_event is not None:
+                    if any(s in str(e) for s in ("Session terminated", "Connection closed")) and reconnect_event is not None:
                         reconnect_event.set()
                     result_text = f"Tool error [{e.error.code}]: {e.error.message}"
                 except Exception as e:
