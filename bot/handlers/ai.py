@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from aiogram import F, Router
 from aiogram.types import Message
@@ -62,6 +63,8 @@ all_tools: list = []
 tool_to_session: dict[str, ClientSession] = {}
 reconnect_event: asyncio.Event | None = None
 _history_cache: dict[int, list] = {}
+_model_blocked_until: dict[str, float] = {}
+_MODEL_BLOCK_SECONDS = 8 * 3600
 
 
 @router.message(F.document.mime_type == "application/x-bittorrent")
@@ -93,15 +96,29 @@ async def handle_message(message: Message):
         await _safe_reply(message, f"Something went wrong [{type(e).__name__}]: {e}")
 
 
+def _is_rate_limited(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return any(kw in s for kw in ("429", "resource_exhausted", "quota exceeded", "rate limit"))
+
+
 async def _generate_with_fallback(contents, config):
+    now = time.time()
     last_exc = None
     for model in settings.gemini_models:
+        blocked_until = _model_blocked_until.get(model, 0)
+        if blocked_until > now:
+            logger.debug("Skipping model %s (rate-limited, %.0fh remaining)", model, (blocked_until - now) / 3600)
+            continue
         try:
             return await gemini_client.aio.models.generate_content(
                 model=model, contents=contents, config=config,
             )
         except Exception as e:
-            logger.warning("Model %s failed: %s, trying next", model, e)
+            if _is_rate_limited(e):
+                _model_blocked_until[model] = now + _MODEL_BLOCK_SECONDS
+                logger.warning("Model %s rate-limited, blocking for %dh", model, _MODEL_BLOCK_SECONDS // 3600)
+            else:
+                logger.warning("Model %s failed: %s, trying next", model, e)
             last_exc = e
     raise last_exc
 
