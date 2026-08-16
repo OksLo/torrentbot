@@ -3,8 +3,8 @@ services:
     devices:
       - /dev/dri:/dev/dri
     group_add:
-      - render
-      - video
+      - "${RENDER_GID}"
+      - "${VIDEO_GID}"
 
   setup:
     environment:

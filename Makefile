@@ -1,4 +1,6 @@
 GPU_OVERRIDE := $(shell [ -d /dev/dri ] && echo '-f docker-compose.gpu.yml')
+export RENDER_GID := $(shell getent group render | cut -d: -f3)
+export VIDEO_GID  := $(shell getent group video  | cut -d: -f3)
 
 up:
 	docker compose -f docker-compose.yml $(GPU_OVERRIDE) up -d
