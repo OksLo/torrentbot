@@ -1,0 +1,11 @@
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - render
+      - video
+
+  setup:
+    environment:
+      - JELLYFIN_HW_ACCEL=vaapi

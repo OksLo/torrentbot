@@ -1,5 +1,7 @@
+GPU_OVERRIDE := $(shell [ -d /dev/dri ] && echo '-f docker-compose.gpu.yml')
+
 up:
-	docker compose up -d
+	docker compose -f docker-compose.yml $(GPU_OVERRIDE) up -d
 
 down:
 	docker compose down
@@ -14,5 +16,5 @@ restart-bot:
 	docker compose restart telegram-bot
 
 upgrade:
-	docker compose pull
-	docker compose up -d --force-recreate --remove-orphans
+	docker compose -f docker-compose.yml $(GPU_OVERRIDE) pull
+	docker compose -f docker-compose.yml $(GPU_OVERRIDE) up -d --force-recreate --remove-orphans

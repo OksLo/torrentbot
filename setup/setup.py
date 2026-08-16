@@ -33,6 +33,7 @@ QBIT_USERNAME = os.environ.get('QBIT_USERNAME', 'admin')
 QBIT_PASSWORD = os.environ['QBIT_PASSWORD']
 JELLYFIN_USERNAME = os.environ.get('JELLYFIN_USERNAME', 'admin')
 JELLYFIN_PASSWORD = os.environ['JELLYFIN_PASSWORD']
+JELLYFIN_HW_ACCEL = os.environ.get('JELLYFIN_HW_ACCEL', '')
 
 
 def wait_for(url, timeout=120):
@@ -309,7 +310,33 @@ def setup_jellyfin():
         print('  Jellyfin API key written to /config/jellyfin.env.')
     else:
         print('  WARN: Could not create Jellyfin API key.')
+
+    setup_jellyfin_hw_accel(token)
     return api_key
+
+
+def setup_jellyfin_hw_accel(token):
+    if not JELLYFIN_HW_ACCEL:
+        return
+
+    print(f'==> Configuring Jellyfin hardware transcoding ({JELLYFIN_HW_ACCEL})...')
+    status, body = _jf('/System/Configuration/encoding', token=token)
+    if status != 200:
+        print(f'  WARN: Could not read encoding config ({status}). Skipping.')
+        return
+
+    config = json.loads(body)
+    if config.get('HardwareAccelerationType') == JELLYFIN_HW_ACCEL:
+        print('  Hardware transcoding already configured.')
+        return
+
+    config['HardwareAccelerationType'] = JELLYFIN_HW_ACCEL
+    config['VaapiDevice'] = '/dev/dri/renderD128'
+    status, _ = _jf('/System/Configuration/encoding', config, token=token)
+    if status == 204:
+        print(f'  Hardware transcoding set to {JELLYFIN_HW_ACCEL}.')
+    else:
+        print(f'  WARN: Failed to set hardware transcoding ({status}).')
 
 
 def setup_autorun(api_key):
