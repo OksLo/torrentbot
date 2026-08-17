@@ -315,6 +315,14 @@ def setup_jellyfin():
     return api_key
 
 
+# Codecs supported for VA-API decode on Intel JasperLake (iHD driver, Gen11 LP).
+# Source: intel/media-driver ehlCodecInfo struct (JSL shares the EHL platform ID).
+# Excluded — not supported by iHD at any generation:
+#   mpeg4  (MPEG-4 Part 2 / DivX / Xvid) — ffmpeg exits with code 234 if attempted
+#   av1    (first supported on Tiger Lake Gen12)
+_VAAPI_HW_DECODE_CODECS = ["h264", "hevc", "vp8", "vp9", "mpeg2video", "vc1", "mjpeg"]
+
+
 def setup_jellyfin_hw_accel(token):
     if not JELLYFIN_HW_ACCEL:
         return
@@ -326,12 +334,18 @@ def setup_jellyfin_hw_accel(token):
         return
 
     config = json.loads(body)
-    if config.get('HardwareAccelerationType') == JELLYFIN_HW_ACCEL:
+    already_set = (
+        config.get('HardwareAccelerationType') == JELLYFIN_HW_ACCEL
+        and config.get('VaapiDevice') == '/dev/dri/renderD128'
+        and set(config.get('HardwareDecodingCodecs') or []) == set(_VAAPI_HW_DECODE_CODECS)
+    )
+    if already_set:
         print('  Hardware transcoding already configured.')
         return
 
     config['HardwareAccelerationType'] = JELLYFIN_HW_ACCEL
     config['VaapiDevice'] = '/dev/dri/renderD128'
+    config['HardwareDecodingCodecs'] = _VAAPI_HW_DECODE_CODECS
     status, _ = _jf('/System/Configuration/encoding', config, token=token)
     if status == 204:
         print(f'  Hardware transcoding set to {JELLYFIN_HW_ACCEL}.')
