@@ -317,10 +317,11 @@ def setup_jellyfin():
 
 # Codecs supported for VA-API decode on Intel JasperLake (iHD driver, Gen11 LP).
 # Source: intel/media-driver ehlCodecInfo struct (JSL shares the EHL platform ID).
+# hevc_10bit and vp9_10bit are separate Jellyfin codec identifiers for 10-bit decode.
 # Excluded — not supported by iHD at any generation:
 #   mpeg4  (MPEG-4 Part 2 / DivX / Xvid) — ffmpeg exits with code 234 if attempted
 #   av1    (first supported on Tiger Lake Gen12)
-_VAAPI_HW_DECODE_CODECS = ["h264", "hevc", "vp8", "vp9", "mpeg2video", "vc1", "mjpeg"]
+_VAAPI_HW_DECODE_CODECS = ["h264", "hevc", "hevc_10bit", "vp8", "vp9", "vp9_10bit", "mpeg2video", "vc1"]
 
 
 def setup_jellyfin_hw_accel(token):
@@ -333,18 +334,27 @@ def setup_jellyfin_hw_accel(token):
         print(f'  WARN: Could not read encoding config ({status}). Skipping.')
         return
 
+    # EnableHardwareEncoding is disabled because Jellyfin's software-decode +
+    # hardware-encode path is broken on JasperLake iHD: the hwupload filter uses
+    # derive_device=vaapi but the device is initialized as vaapi=va:..., causing
+    # ffmpeg to exit with code 234 (AVERROR(EINVAL)) for any codec not in
+    # HardwareDecodingCodecs (e.g. MPEG-4 AVI files). GPU is still used for decoding.
+    desired = {
+        'HardwareAccelerationType': JELLYFIN_HW_ACCEL,
+        'VaapiDevice': '/dev/dri/renderD128',
+        'EnableHardwareEncoding': False,
+    }
+
     config = json.loads(body)
     already_set = (
-        config.get('HardwareAccelerationType') == JELLYFIN_HW_ACCEL
-        and config.get('VaapiDevice') == '/dev/dri/renderD128'
+        all(config.get(k) == v for k, v in desired.items())
         and set(config.get('HardwareDecodingCodecs') or []) == set(_VAAPI_HW_DECODE_CODECS)
     )
     if already_set:
         print('  Hardware transcoding already configured.')
         return
 
-    config['HardwareAccelerationType'] = JELLYFIN_HW_ACCEL
-    config['VaapiDevice'] = '/dev/dri/renderD128'
+    config.update(desired)
     config['HardwareDecodingCodecs'] = _VAAPI_HW_DECODE_CODECS
     status, _ = _jf('/System/Configuration/encoding', config, token=token)
     if status == 204:
