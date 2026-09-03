@@ -80,6 +80,7 @@ setup/
 
 docker-compose.yml     # base service definitions
 docker-compose.gpu.yml # GPU overlay: /dev/dri passthrough + VA-API config
+docker-compose.blkio.yml # Optional blkio override to limit qBittorrent drive I/O
 Makefile               # make targets; auto-detects GPU and applies overlay
 ```
 
@@ -105,6 +106,12 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 | `QBIT_MCP_URL` | no | qBittorrent MCP SSE URL (default: `http://qbittorrent-mcp:3000/sse`) |
 | `JELLYFIN_MCP_URL` | no | Jellyfin MCP URL (default: `http://jellyfin-mcp:8080/mcp`) |
 | `TZ` | no | Timezone (default: `Europe/London`) |
+
+| `QBIT_BLKIO_DRIVE` | no | Drive node to throttle for qBittorrent blkio limits (default: `/dev/sda`) |
+| `QBIT_BLKIO_READ_BPS` | no | Byte-per-second read limit for blkio (default: `20971520` = 20 MiB/s) |
+| `QBIT_BLKIO_WRITE_BPS` | no | Byte-per-second write limit for blkio (default: `20971520` = 20 MiB/s) |
+| `QBIT_BLKIO_READ_IOPS` | no | Read IOPS limit for blkio (default: `50`) |
+| `QBIT_BLKIO_WRITE_IOPS` | no | Write IOPS limit for blkio (default: `50`) |
 
 ## Runtime Volumes
 

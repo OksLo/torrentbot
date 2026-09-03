@@ -91,3 +91,25 @@ The `downloads/` directory is shared as `\\<host-ip>\downloads` (read-only, no p
 
 - **Windows**: open File Explorer → address bar → `\\<host-ip>\downloads`
 - **macOS**: Finder → Go → Connect to Server → `smb://<host-ip>/downloads`
+
+## Optional: Drive I/O throttling
+
+You can limit qBittorrent's disk I/O using a small Compose override that applies blkio limits to the `qbittorrent` service.
+
+File: `docker-compose.blkio.yml`
+
+Environment variables (defaults shown):
+
+- `QBIT_BLKIO_DRIVE` (default: `/dev/sda`)
+- `QBIT_BLKIO_READ_BPS` (default: `20971520` — 20 MiB/s)
+- `QBIT_BLKIO_WRITE_BPS` (default: `20971520` — 20 MiB/s)
+- `QBIT_BLKIO_READ_IOPS` (default: `50`)
+- `QBIT_BLKIO_WRITE_IOPS` (default: `50`)
+
+Example: run with the override and custom limits
+
+```bash
+QBIT_BLKIO_DRIVE=/dev/nvme0n1 QBIT_BLKIO_BPS=104857600 QBIT_BLKIO_IOPS=200 \
+	docker compose -f docker-compose.yml -f docker-compose.blkio.yml up -d
+```
+

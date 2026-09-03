@@ -1,0 +1,71 @@
+services:
+  qbittorrent:
+    # For cgroup v2 hosts we can't rely on Compose's blkio_config. Instead
+    # use a small helper service `blkio-setter` (below) that writes to
+    # the container's cgroup `io.max` using environment variables.
+    # The helper runs once after qbittorrent is healthy.
+    
+  blkio-setter:
+    image: docker:latest
+    container_name: blkio-setter
+    depends_on:
+      qbittorrent:
+        condition: service_started
+    environment:
+      - QBIT_BLKIO_DRIVE=${QBIT_BLKIO_DRIVE:-/dev/sda}
+      - QBIT_BLKIO_READ_BPS=${QBIT_BLKIO_READ_BPS:-20971520}
+      - QBIT_BLKIO_WRITE_BPS=${QBIT_BLKIO_WRITE_BPS:-20971520}
+      - QBIT_BLKIO_READ_IOPS=${QBIT_BLKIO_READ_IOPS:-50}
+      - QBIT_BLKIO_WRITE_IOPS=${QBIT_BLKIO_WRITE_IOPS:-50}
+      - TARGET_CONTAINER=qbittorrent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /dev:/dev:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -eu
+      echo "Waiting for $TARGET_CONTAINER to start..."
+      # wait for container PID
+      for i in $(seq 1 60); do
+        pid=$(docker inspect -f '{{.State.Pid}}' "$TARGET_CONTAINER" 2>/dev/null || true)
+        if [ -n "$pid" ] && [ "$pid" != "<no value>" ]; then
+          break
+        fi
+        sleep 1
+      done
+      if [ -z "$pid" ] || [ "$pid" = "<no value>" ]; then
+        echo "Failed to get PID for $TARGET_CONTAINER" >&2
+        exit 1
+      fi
+      echo "Found PID $pid for $TARGET_CONTAINER"
+
+      # get cgroup v2 path for the pid (line starting with '0::')
+      cgpath=$(awk -F: '/^0::/ {print $3; exit}' /proc/$pid/cgroup || true)
+      if [ -z "$cgpath" ]; then
+        echo "Failed to determine cgroup v2 path for pid $pid" >&2
+        exit 1
+      fi
+      target=/sys/fs/cgroup${cgpath}/io.max
+      if [ ! -w "$target" ]; then
+        echo "Cannot write to $target; check permissions and cgroup v2 usage" >&2
+        exit 1
+      fi
+
+      # translate device node to major:minor (decimal)
+      devnode=${QBIT_BLKIO_DRIVE}
+      if [ ! -e "$devnode" ]; then
+        echo "Device $devnode does not exist" >&2
+        exit 1
+      fi
+      majhex=$(stat -c '%t' "$devnode")
+      minhex=$(stat -c '%T' "$devnode")
+      maj=$((0x$majhex))
+      min=$((0x$minhex))
+      devid="$maj:$min"
+
+      echo "Setting io.max for device $devnode -> $devid"
+      echo "$devid rbps=${QBIT_BLKIO_READ_BPS} wbps=${QBIT_BLKIO_WRITE_BPS} riops=${QBIT_BLKIO_READ_IOPS} wiops=${QBIT_BLKIO_WRITE_IOPS}" > "$target"
+      echo "Wrote to $target"
+      exit 0
+    restart: "no"
