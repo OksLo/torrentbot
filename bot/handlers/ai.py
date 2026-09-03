@@ -107,12 +107,15 @@ async def _generate_with_fallback(contents, config):
     for model in settings.gemini_models:
         blocked_until = _model_blocked_until.get(model, 0)
         if blocked_until > now:
-            logger.debug("Skipping model %s (rate-limited, %.0fh remaining)", model, (blocked_until - now) / 3600)
+            logger.info("Skipping model %s (rate-limited, %.0fh remaining)", model, (blocked_until - now) / 3600)
             continue
+        logger.info("Trying model %s", model)
         try:
-            return await gemini_client.aio.models.generate_content(
+            result = await gemini_client.aio.models.generate_content(
                 model=model, contents=contents, config=config,
             )
+            logger.info("Model %s succeeded", model)
+            return result
         except Exception as e:
             if _is_rate_limited(e):
                 _model_blocked_until[model] = now + _MODEL_BLOCK_SECONDS
@@ -120,7 +123,7 @@ async def _generate_with_fallback(contents, config):
             else:
                 logger.warning("Model %s failed: %s, trying next", model, e)
             last_exc = e
-    raise last_exc
+    raise last_exc or RuntimeError("All configured Gemini models are rate-limited")
 
 
 async def _gemini_loop(chat_id: int, user_text: str) -> str:
