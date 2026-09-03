@@ -103,6 +103,7 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 | `QBIT_USERNAME` | no | qBittorrent username (default: `admin`) |
 | `JELLYFIN_USERNAME` | no | Jellyfin admin username (default: `admin`) |
 | `GEMINI_MODEL` | no | Comma-separated model list, priority order (default: `gemini-2.5-flash`) |
+| `HISTORY_LIMIT` | no | Max conversation turns kept in SQLite and sent to the LLM (default: `20`) |
 | `QBIT_MCP_URL` | no | qBittorrent MCP SSE URL (default: `http://qbittorrent-mcp:3000/sse`) |
 | `JELLYFIN_MCP_URL` | no | Jellyfin MCP URL (default: `http://jellyfin-mcp:8080/mcp`) |
 | `TZ` | no | Timezone (default: `Europe/London`) |
