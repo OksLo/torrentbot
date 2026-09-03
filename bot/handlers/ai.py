@@ -60,6 +60,8 @@ gemini_client: genai.Client = None
 qbit_session: ClientSession = None
 jellyfin_session: ClientSession = None
 all_tools: list = []
+qbit_tools: list = []
+jf_tools: list = []
 tool_to_session: dict[str, ClientSession] = {}
 reconnect_event: asyncio.Event | None = None
 _history_cache: dict[int, list] = {}
@@ -94,6 +96,20 @@ async def handle_message(message: Message):
     except Exception as e:
         logger.exception("gemini loop failed")
         await _safe_reply(message, f"Something went wrong [{type(e).__name__}]: {e}")
+
+
+def _select_tools(text: str) -> list:
+    tl = text.lower()
+    has_qbit = any(kw in tl for kw in settings.qbit_keyword_list)
+    has_jf = any(kw in tl for kw in settings.jellyfin_keyword_list)
+    if has_qbit and not has_jf:
+        logger.info("Tool filter: qBittorrent only")
+        return qbit_tools
+    if has_jf and not has_qbit:
+        logger.info("Tool filter: Jellyfin only")
+        return jf_tools
+    logger.info("Tool filter: all tools")
+    return all_tools
 
 
 def _is_rate_limited(exc: Exception) -> bool:
@@ -137,7 +153,7 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
 
     cfg = types.GenerateContentConfig(
         system_instruction=_SYSTEM,
-        tools=all_tools or None,
+        tools=_select_tools(user_text) or None,
     )
 
     try:
