@@ -89,6 +89,8 @@ async def main():
 
                                 ai.tool_to_session = {t.name: qbit_sess for t in qbit_tools}
                                 ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
+                                ai.qbit_tools = _build_gemini_tools(qbit_tools)
+                                ai.jf_tools = _build_gemini_tools(jf_tools)
                                 ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
 
                                 reconnect_needed = asyncio.Event()
@@ -113,6 +115,8 @@ async def main():
         except Exception:
             logger.exception("MCP connection lost, reconnecting in 5s...")
             ai.all_tools = []
+            ai.qbit_tools = []
+            ai.jf_tools = []
             ai.tool_to_session = {}
             ai.reconnect_event = None
             await asyncio.sleep(5)
