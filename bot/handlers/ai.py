@@ -137,42 +137,46 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
         tools=all_tools or None,
     )
 
-    while True:
-        response = await _generate_with_fallback(hist, cfg)
-        model_content = response.candidates[0].content
-        hist.append(model_content)
-        history.append_turn(chat_id, model_content.role, model_content.parts)
+    try:
+        while True:
+            response = await _generate_with_fallback(hist, cfg)
+            model_content = response.candidates[0].content
+            hist.append(model_content)
+            history.append_turn(chat_id, model_content.role, model_content.parts)
 
-        fn_calls = [p for p in model_content.parts if p.function_call is not None]
-        if not fn_calls:
-            return response.text or "(no response)"
+            fn_calls = [p for p in model_content.parts if p.function_call is not None]
+            if not fn_calls:
+                return response.text or "(no response)"
 
-        fn_parts = []
-        for p in fn_calls:
-            fc = p.function_call
-            session = tool_to_session.get(fc.name)
-            if session is None:
-                result_text = f"Tool '{fc.name}' is not available."
-            else:
-                try:
-                    result = await session.call_tool(fc.name, dict(fc.args))
-                    result_text = "\n".join(
-                        c.text for c in result.content if hasattr(c, "text") and c.text
-                    ) or "(no output)"
-                except MCPError as e:
-                    logger.exception("MCP tool call failed: %s", fc.name)
-                    if any(s in str(e) for s in ("Session terminated", "Connection closed")) and reconnect_event is not None:
-                        reconnect_event.set()
-                    result_text = f"Tool error [{e.error.code}]: {e.error.message}"
-                except Exception as e:
-                    logger.exception("MCP tool call failed: %s", fc.name)
-                    result_text = f"Tool error [{type(e).__name__}]: {e}"
-            fn_parts.append(types.Part(
-                function_response=types.FunctionResponse(
-                    name=fc.name, response={"result": result_text}
-                )
-            ))
+            fn_parts = []
+            for p in fn_calls:
+                fc = p.function_call
+                session = tool_to_session.get(fc.name)
+                if session is None:
+                    result_text = f"Tool '{fc.name}' is not available."
+                else:
+                    try:
+                        result = await session.call_tool(fc.name, dict(fc.args))
+                        result_text = "\n".join(
+                            c.text for c in result.content if hasattr(c, "text") and c.text
+                        ) or "(no output)"
+                    except MCPError as e:
+                        logger.exception("MCP tool call failed: %s", fc.name)
+                        if any(s in str(e) for s in ("Session terminated", "Connection closed")) and reconnect_event is not None:
+                            reconnect_event.set()
+                        result_text = f"Tool error [{e.error.code}]: {e.error.message}"
+                    except Exception as e:
+                        logger.exception("MCP tool call failed: %s", fc.name)
+                        result_text = f"Tool error [{type(e).__name__}]: {e}"
+                fn_parts.append(types.Part(
+                    function_response=types.FunctionResponse(
+                        name=fc.name, response={"result": result_text}
+                    )
+                ))
 
-        tool_content = types.Content(role="user", parts=fn_parts)
-        hist.append(tool_content)
-        history.append_turn(chat_id, "user", tool_content.parts)
+            tool_content = types.Content(role="user", parts=fn_parts)
+            hist.append(tool_content)
+            history.append_turn(chat_id, "user", tool_content.parts)
+    except Exception:
+        _history_cache.pop(chat_id, None)
+        raise
