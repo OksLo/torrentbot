@@ -47,6 +47,8 @@ TZ=Europe/London
 
 Optionally set `GEMINI_MODEL` to a comma-separated list of models in priority order (e.g. `gemini-2.5-pro,gemini-2.5-flash`). The bot tries them in order and skips models that have hit their rate limit for 8 hours.
 
+Optionally set `HISTORY_LIMIT` to control how many conversation turns are kept in SQLite and sent to the LLM (default: `20`).
+
 **3. Start all services**
 
 ```bash

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     download_path: str = "/downloads"
     gemini_api_key: str
     gemini_model: str = "gemini-2.5-flash"
+    history_limit: int = 20
 
     @property
     def gemini_models(self) -> list[str]:

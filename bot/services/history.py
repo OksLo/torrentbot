@@ -54,9 +54,10 @@ def load_history(chat_id: int) -> list:
         return []
     try:
         with sqlite3.connect(_db_path) as conn:
+            from config import settings
             rows = conn.execute(
-                "SELECT role, parts FROM chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT 40",
-                (chat_id,),
+                "SELECT role, parts FROM chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
+                (chat_id, settings.history_limit),
             ).fetchall()
         hist = [types.Content(role=row[0], parts=_json_to_parts(row[1])) for row in reversed(rows)]
         # trim trailing incomplete tool-call cycles (bot may have been killed mid-loop)
@@ -76,10 +77,11 @@ def append_turn(chat_id: int, role: str, parts) -> None:
             "INSERT INTO chat_history (chat_id, role, parts) VALUES (?, ?, ?)",
             (chat_id, role, _parts_to_json(parts)),
         )
+        from config import settings
         conn.execute(
             "DELETE FROM chat_history WHERE chat_id = ? AND id NOT IN "
-            "(SELECT id FROM chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT 40)",
-            (chat_id, chat_id),
+            "(SELECT id FROM chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT ?)",
+            (chat_id, chat_id, settings.history_limit),
         )
 
 
