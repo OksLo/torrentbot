@@ -56,14 +56,13 @@ def _build_gemini_tools(mcp_tools) -> list:
     return [types.Tool(function_declarations=decls)] if decls else []
 
 
-async def main():
-    bot = Bot(token=settings.bot_token)
-    dp = Dispatcher()
+async def _mcp_loop():
+    """Hold the MCP sessions open, reconnecting whenever one drops.
 
-    history.init_db(settings.history_db_path)
-    ai.gemini_client = genai.Client(api_key=settings.gemini_api_key)
-    dp.include_router(ai.router)
-
+    Runs for the lifetime of the process, independently of Telegram polling.
+    While a reconnect is in flight the tool registries are empty and the Gemini
+    loop simply answers without tools.
+    """
     while True:
         try:
             async with sse_client(settings.qbit_mcp_url) as (qbit_read, qbit_write):
@@ -96,22 +95,12 @@ async def main():
                                 reconnect_needed = asyncio.Event()
                                 ai.reconnect_event = reconnect_needed
 
-                                polling_task = asyncio.create_task(dp.start_polling(bot))
-                                reconnect_task = asyncio.create_task(reconnect_needed.wait())
-                                await asyncio.wait(
-                                    {polling_task, reconnect_task},
-                                    return_when=asyncio.FIRST_COMPLETED,
-                                )
-                                polling_task.cancel()
-                                reconnect_task.cancel()
-                                for t in (polling_task, reconnect_task):
-                                    try:
-                                        await t
-                                    except (asyncio.CancelledError, Exception):
-                                        pass
-
-                                if reconnect_needed.is_set():
-                                    raise RuntimeError("MCP session terminated")
+                                # Park here until a tool call reports the session
+                                # is gone, then fall through to the reconnect.
+                                await reconnect_needed.wait()
+                                raise RuntimeError("MCP session terminated")
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("MCP connection lost, reconnecting in 5s...")
             ai.all_tools = []
@@ -120,6 +109,25 @@ async def main():
             ai.tool_to_session = {}
             ai.reconnect_event = None
             await asyncio.sleep(5)
+
+
+async def main():
+    bot = Bot(token=settings.bot_token)
+    dp = Dispatcher()
+
+    history.init_db(settings.history_db_path)
+    ai.gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    dp.include_router(ai.router)
+
+    # MCP connectivity is independent of Telegram polling, so it gets its own
+    # task. Polling must be started exactly once per process: starting it per
+    # MCP reconnect leaves orphaned getUpdates loops behind, and Telegram
+    # rejects concurrent pollers with TelegramConflictError.
+    mcp_task = asyncio.create_task(_mcp_loop())
+    try:
+        await dp.start_polling(bot)
+    finally:
+        mcp_task.cancel()
 
 
 if __name__ == "__main__":
