@@ -60,6 +60,10 @@ def load_history(chat_id: int) -> list:
                 (chat_id, settings.history_limit),
             ).fetchall()
         hist = [types.Content(role=row[0], parts=_json_to_parts(row[1])) for row in reversed(rows)]
+        # trim leading orphaned turns: history_limit truncation can cut the function_call
+        # that a leading function_response belongs to; Gemini requires them to be adjacent
+        while hist and not (hist[0].role == "user" and any(p.text is not None for p in hist[0].parts)):
+            hist.pop(0)
         # trim trailing incomplete tool-call cycles (bot may have been killed mid-loop)
         while hist and any(
             p.function_call is not None or p.function_response is not None
