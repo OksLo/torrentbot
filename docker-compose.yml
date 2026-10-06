@@ -91,6 +91,8 @@ services:
     container_name: samba
     environment:
       - TZ=${TZ:-Europe/London}
+      - USERID=1000
+      - GROUPID=1000
     command: >
       -s "downloads;/mnt/downloads;yes;yes;yes"
       -p

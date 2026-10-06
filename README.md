@@ -93,6 +93,8 @@ If the host has an Intel GPU (`/dev/dri` present), `make up` automatically enabl
 
 The `downloads/` directory is shared as `\\<host-ip>\downloads` (read-only, no password required).
 
+On every start the Samba container re-owns the share to UID/GID `1000` (`USERID`/`GROUPID`), matching qBittorrent's `PUID`/`PGID`. If you change one, change the other, or Samba will reset ownership of `downloads/` on each restart.
+
 - **Windows**: open File Explorer → address bar → `\\<host-ip>\downloads`
 - **macOS**: Finder → Go → Connect to Server → `smb://<host-ip>/downloads`
 
