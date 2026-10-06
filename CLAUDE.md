@@ -8,13 +8,14 @@ On every code change, update the relevant sections of `README.md` and `CLAUDE.md
 
 ## What This Project Does
 
-Five-service self-hosted media stack:
+Six-service self-hosted media stack:
 
-1. **Telegram bot** (`bot/`) — AI assistant powered by Google Gemini. Accepts natural language commands, magnet links, and `.torrent` files. Uses MCP tools to control qBittorrent and Jellyfin.
+1. **Telegram bot** (`bot/`) — AI assistant powered by Google Gemini. Accepts natural language commands, magnet links, and `.torrent` files. Uses MCP tools to control qBittorrent and Jellyfin. Manages AceStream live channels via local Gemini function tools. Serves `http://telegram-bot:8765/channels.m3u` for Jellyfin Live TV.
 2. **qBittorrent** — downloads torrents into `./downloads/`
-3. **Jellyfin** — media streaming server; optionally uses Intel GPU hardware transcoding via VA-API
-4. **Samba** — serves `./downloads/` over SMB to PCs
-5. **Setup** — one-time first-boot configuration service
+3. **Jellyfin** — media streaming server; optionally uses Intel GPU hardware transcoding via VA-API; Live TV fed by AceStream M3U playlist
+4. **AceStream engine** — P2P live stream proxy; converts `acestream://` content IDs to HTTP streams at port 6878
+5. **Samba** — serves `./downloads/` over SMB to PCs
+6. **Setup** — one-time first-boot configuration service (built from `./setup`)
 
 All services run via Docker Compose. GPU passthrough is auto-detected at `make up` time.
 
@@ -65,14 +66,16 @@ The script is idempotent — it verifies and reapplies configuration on every co
 
 ```
 bot/
-  main.py              # entry point: MCP sessions, Gemini client, reconnect loop
+  main.py              # entry point: MCP sessions, Gemini client, reconnect loop, M3U server
   config.py            # pydantic-settings; reads from env
   smoke_test.py        # import-level smoke test run at container build
   handlers/
     ai.py              # all message handling: Gemini AI loop, tool dispatch, history
+    acestream.py       # local Gemini function tools for AceStream channel management
   services/
     qbittorrent.py     # async httpx client for qBittorrent Web API v2
     history.py         # SQLite-backed per-chat conversation history
+    acestream_db.py    # SQLite-backed AceStream channel registry
 
 setup/
   Dockerfile           # containerizes setup.py for GHCR publication
@@ -86,8 +89,10 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 
 ### Bot internals
 
-- `main.py` opens two persistent MCP sessions (SSE for qBittorrent, streamable HTTP for Jellyfin) and exposes their tools to the AI handler. On transport errors it tears down sessions and reconnects with 5-second backoff.
-- `ai.py` runs a Gemini `generate_content` loop per message, executing MCP tool calls until the model returns a final text response. Conversation history is persisted to SQLite and loaded on first message per chat.
+- `main.py` opens two persistent MCP sessions (SSE for qBittorrent, streamable HTTP for Jellyfin) and exposes their tools to the AI handler. On transport errors it tears down sessions and reconnects with 5-second backoff. It also starts an `aiohttp` HTTP server on port 8765 serving `GET /channels.m3u` for Jellyfin Live TV.
+- `ai.py` runs a Gemini `generate_content` loop per message, executing MCP tool calls until the model returns a final text response. Tool dispatch checks `local_tool_dispatch` first (AceStream local tools), then falls back to MCP sessions. Conversation history is persisted to SQLite and loaded on first message per chat.
+- `handlers/acestream.py` defines four local Gemini function tools (add/remove/list channels, get stream URL) with a synchronous `dispatch()` function. No MCP server required.
+- `services/acestream_db.py` stores channels in a separate `channels.db` SQLite file (name, content_id, created_at). Content IDs are extracted from `acestream://` links automatically.
 - Model fallback: `GEMINI_MODEL` accepts a comma-separated list in priority order. Rate-limited models (429 / RESOURCE_EXHAUSTED) are skipped in-process for 8 hours.
 - All Telegram replies go through `_safe_reply` to prevent `TelegramNetworkError` from crashing the handler.
 
@@ -104,11 +109,16 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 | `JELLYFIN_USERNAME` | no | Jellyfin admin username (default: `admin`) |
 | `GEMINI_MODEL` | no | Comma-separated model list, priority order (default: `gemini-2.5-flash`) |
 | `HISTORY_LIMIT` | no | Max conversation turns kept in SQLite and sent to the LLM (default: `20`) |
+| `DB_PATH` | no | SQLite database file path (default: `/data/bot.db`) — both chat history and AceStream channels are stored here |
 | `QBIT_KEYWORDS` | no | Comma-separated keywords (UTF-8) that route to qBittorrent-only tools (default: torrent, magnet, download, …) |
 | `JELLYFIN_KEYWORDS` | no | Comma-separated keywords (UTF-8) that route to Jellyfin-only tools (default: movie, series, stream, …) |
 | `QBIT_MCP_URL` | no | qBittorrent MCP SSE URL (default: `http://qbittorrent-mcp:3000/sse`) |
 | `JELLYFIN_MCP_URL` | no | Jellyfin MCP URL (default: `http://jellyfin-mcp:8080/mcp`) |
 | `TZ` | no | Timezone (default: `Europe/London`) |
+
+| `ACESTREAM_ENGINE_URL` | no | AceStream engine base URL (default: `http://acestream:6878`) |
+| `ACESTREAM_KEYWORDS` | no | Comma-separated keywords that route to AceStream-only tools (default: acestream, channel, live, iptv, …) |
+| `M3U_PORT` | no | Port for the bot's internal M3U HTTP server used by Jellyfin Live TV (default: `8765`) |
 
 | `QBIT_BLKIO_DRIVE` | no | Drive node to throttle for qBittorrent blkio limits (default: `/dev/sda`) |
 | `QBIT_BLKIO_READ_BPS` | no | Byte-per-second read limit for blkio (default: `20971520` = 20 MiB/s) |
@@ -121,6 +131,6 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 Docker creates these at startup — they are gitignored:
 
 - `./downloads/` — shared download directory (Samba + Jellyfin serve this)
-- `./data/` — bot runtime data: `history.db` (per-chat conversation history)
+- `./data/` — bot runtime data: `bot.db` (per-chat conversation history + AceStream channel registry)
 - `./config/qbittorrent/` — qBittorrent config persistence
 - `./config/jellyfin/` — Jellyfin config persistence; `jellyfin.env` holds the Jellyfin API key

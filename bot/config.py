@@ -24,10 +24,19 @@ class Settings(BaseSettings):
     @property
     def jellyfin_keyword_list(self) -> list[str]:
         return [k.strip().lower() for k in self.jellyfin_keywords.split(",") if k.strip()]
+
+    acestream_engine_url: str = "http://acestream:6878"
+    acestream_keywords: str = "acestream,channel,live,iptv,тв,канал,прямой эфир"
+    m3u_port: int = 8765
+
+    @property
+    def acestream_keyword_list(self) -> list[str]:
+        return [k.strip().lower() for k in self.acestream_keywords.split(",") if k.strip()]
+
     qbit_mcp_url: str = "http://qbittorrent-mcp:3000/sse"
     jellyfin_mcp_url: str = "http://jellyfin-mcp:8080/mcp"
     mcp_http_token: str
-    history_db_path: str = "/data/history.db"
+    db_path: str = "/data/bot.db"
 
     class Config:
         env_file = ".env"

@@ -1,6 +1,6 @@
 # Torrent Bot
 
-Self-hosted media stack: a Telegram AI assistant that accepts natural language commands, magnet links, and torrent files, downloads them via qBittorrent, and serves the result over SMB (Windows/Mac file sharing) and Jellyfin (streaming). The bot is powered by Google Gemini and controls qBittorrent and Jellyfin via MCP tools.
+Self-hosted media stack: a Telegram AI assistant that accepts natural language commands, magnet links, and torrent files, downloads them via qBittorrent, and serves the result over SMB (Windows/Mac file sharing) and Jellyfin (streaming). The bot is powered by Google Gemini and controls qBittorrent and Jellyfin via MCP tools. It also manages AceStream live channels, which appear as Live TV entries in Jellyfin.
 
 ## Services
 
@@ -9,7 +9,8 @@ Self-hosted media stack: a Telegram AI assistant that accepts natural language c
 | qBittorrent Web UI | 8080 | Torrent client + management |
 | Jellyfin | 8096 | Media streaming (browser, TV apps) |
 | Samba | 445 | SMB file share for PCs |
-| Telegram bot | — | AI assistant: natural language, magnet links, `.torrent` files |
+| AceStream engine | 6878 | P2P live stream proxy |
+| Telegram bot | 8765 | AI assistant: natural language, magnet links, `.torrent` files; M3U playlist for Jellyfin Live TV |
 
 ## Prerequisites
 
@@ -49,7 +50,7 @@ Optionally set `GEMINI_MODEL` to a comma-separated list of models in priority or
 
 Optionally set `HISTORY_LIMIT` to control how many conversation turns are kept in SQLite and sent to the LLM (default: `20`).
 
-Optionally set `QBIT_KEYWORDS` / `JELLYFIN_KEYWORDS` to comma-separated UTF-8 keyword lists that control which MCP tools are included in the LLM context per message. If only qBittorrent keywords are matched, only qBittorrent tools are sent; same for Jellyfin. If both or neither match, all tools are sent.
+Optionally set `QBIT_KEYWORDS` / `JELLYFIN_KEYWORDS` / `ACESTREAM_KEYWORDS` to comma-separated UTF-8 keyword lists that control which tools are included in the LLM context per message. If only qBittorrent keywords are matched, only qBittorrent tools are sent; same for Jellyfin and AceStream. If multiple or none match, all tools are sent.
 
 **3. Start all services**
 
@@ -73,6 +74,9 @@ Examples:
 - _"Show active downloads"_
 - _"What's been added to Jellyfin recently?"_
 - _"Update the metadata for Inception"_
+- _"Add acestream channel Sky News with ID abc123…"_
+- _"List my live channels"_
+- _"Get stream URL for Sky News"_
 
 ## Useful Commands
 

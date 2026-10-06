@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import os
 
 import httpx2
 from aiogram import Bot, Dispatcher
+from aiohttp import web
 from google import genai
 from google.genai import types
 from mcp import ClientSession
@@ -11,6 +13,8 @@ from mcp.client.streamable_http import streamable_http_client
 
 from config import settings
 from handlers import ai
+from handlers import acestream as acestream_handler
+from services import acestream_db
 from services import history
 
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +60,33 @@ def _build_gemini_tools(mcp_tools) -> list:
     return [types.Tool(function_declarations=decls)] if decls else []
 
 
+def _migrate_db(new_path: str) -> None:
+    old_path = os.path.join(os.path.dirname(new_path), "history.db")
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.rename(old_path, new_path)
+        logger.info("Migrated database: %s → %s", old_path, new_path)
+
+
+async def _m3u_handler(request: web.Request) -> web.Response:
+    channels = acestream_db.list_channels()
+    lines = ["#EXTM3U"]
+    for ch in channels:
+        url = f"{settings.acestream_engine_url}/ace/getstream?id={ch['content_id']}&format=ts"
+        lines.append(f'#EXTINF:-1,{ch["name"]}')
+        lines.append(url)
+    return web.Response(text="\n".join(lines), content_type="application/x-mpegurl")
+
+
+async def _start_m3u_server() -> None:
+    app = web.Application()
+    app.router.add_get("/channels.m3u", _m3u_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", settings.m3u_port)
+    await site.start()
+    logger.info("M3U server listening on :%d", settings.m3u_port)
+
+
 async def _mcp_loop():
     """Hold the MCP sessions open, reconnecting whenever one drops.
 
@@ -90,7 +121,9 @@ async def _mcp_loop():
                                 ai.tool_to_session.update({t.name: jf_sess for t in jf_tools})
                                 ai.qbit_tools = _build_gemini_tools(qbit_tools)
                                 ai.jf_tools = _build_gemini_tools(jf_tools)
-                                ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools)
+                                ai.acestream_tools = acestream_handler.gemini_tools
+                                ai.local_tool_dispatch = {n: acestream_handler.dispatch for n in acestream_handler.TOOL_NAMES}
+                                ai.all_tools = _build_gemini_tools(qbit_tools + jf_tools) + acestream_handler.gemini_tools
 
                                 reconnect_needed = asyncio.Event()
                                 ai.reconnect_event = reconnect_needed
@@ -103,7 +136,7 @@ async def _mcp_loop():
             raise
         except Exception:
             logger.exception("MCP connection lost, reconnecting in 5s...")
-            ai.all_tools = []
+            ai.all_tools = acestream_handler.gemini_tools
             ai.qbit_tools = []
             ai.jf_tools = []
             ai.tool_to_session = {}
@@ -115,9 +148,14 @@ async def main():
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
 
-    history.init_db(settings.history_db_path)
+    _migrate_db(settings.db_path)
+    history.init_db(settings.db_path)
+    acestream_db.init_db(settings.db_path)
     ai.gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    ai.local_tool_dispatch = {n: acestream_handler.dispatch for n in acestream_handler.TOOL_NAMES}
+    ai.acestream_tools = acestream_handler.gemini_tools
     dp.include_router(ai.router)
+    await _start_m3u_server()
 
     # MCP connectivity is independent of Telegram polling, so it gets its own
     # task. Polling must be started exactly once per process: starting it per

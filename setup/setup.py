@@ -363,6 +363,40 @@ def setup_jellyfin_hw_accel(token):
         print(f'  WARN: Failed to set hardware transcoding ({status}).')
 
 
+def setup_acestream_tv(token):
+    """Register the bot's M3U playlist as a Jellyfin Live TV tuner (idempotent).
+
+    The telegram-bot serves a dynamic M3U at http://telegram-bot:8765/channels.m3u.
+    Jellyfin polls this URL to discover AceStream channels as Live TV entries.
+
+    Jellyfin Live TV tuner API:
+    https://api.jellyfin.org/#tag/LiveTv/operation/AddTunerHost
+    """
+    if not token:
+        print('  WARN: No Jellyfin API key available; skipping AceStream Live TV setup.')
+        return
+    m3u_url = "http://telegram-bot:8765/channels.m3u"
+    print('==> Configuring Jellyfin Live TV tuner for AceStream...')
+
+    status, body = _jf('/LiveTv/TunerHosts', token=token)
+    if status == 200:
+        existing_urls = [h.get('Url', '') for h in json.loads(body)]
+        if m3u_url in existing_urls:
+            print('  AceStream Live TV tuner already registered.')
+            return
+
+    status, _ = _jf('/LiveTv/TunerHosts', {
+        'Type': 'M3U',
+        'Url': m3u_url,
+        'IsEnabled': True,
+        'EnableStreamLooping': False,
+    }, token=token)
+    if status in (200, 204):
+        print('  AceStream Live TV tuner registered.')
+    else:
+        print(f'  WARN: Failed to register Live TV tuner ({status}).')
+
+
 def setup_autorun(api_key):
     """Configure qBittorrent to trigger a Jellyfin library scan on torrent completion.
 
@@ -410,6 +444,7 @@ if __name__ == '__main__':
     setup_qbittorrent()
     api_key = setup_jellyfin()
     setup_autorun(api_key)
+    setup_acestream_tv(api_key)
 
     # Write the sentinel only after both steps succeed so a partial failure
     # causes a full retry on the next container start.

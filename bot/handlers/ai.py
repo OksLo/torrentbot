@@ -32,8 +32,9 @@ async def _safe_reply(message: Message, text: str, **kwargs):
 
 _SYSTEM = (
     "You are a helpful assistant for a self-hosted media server. "
-    "You can manage torrents via qBittorrent and browse/search media via Jellyfin. "
-    "Be concise. When asked about downloads or media, use your available tools.\n\n"
+    "You can manage torrents via qBittorrent, browse/search media via Jellyfin, "
+    "and manage live AceStream channels (add, remove, list, get stream URL). "
+    "Be concise. When asked about downloads, media, or live channels, use your available tools.\n\n"
 
     "Format ALL responses as Telegram HTML (parse_mode=HTML). Supported tags only:\n"
     "- <b>bold</b> for labels, headings, torrent/media names\n"
@@ -62,7 +63,9 @@ jellyfin_session: ClientSession = None
 all_tools: list = []
 qbit_tools: list = []
 jf_tools: list = []
+acestream_tools: list = []
 tool_to_session: dict[str, ClientSession] = {}
+local_tool_dispatch: dict[str, object] = {}
 reconnect_event: asyncio.Event | None = None
 _history_cache: dict[int, list] = {}
 _model_blocked_until: dict[str, float] = {}
@@ -100,16 +103,21 @@ async def handle_message(message: Message):
 
 def _select_tools(text: str) -> list:
     tl = text.lower()
-    has_qbit = any(kw in tl for kw in settings.qbit_keyword_list)
-    has_jf = any(kw in tl for kw in settings.jellyfin_keyword_list)
-    if has_qbit and not has_jf:
-        logger.info("Tool filter: qBittorrent only")
-        return qbit_tools
-    if has_jf and not has_qbit:
-        logger.info("Tool filter: Jellyfin only")
-        return jf_tools
-    logger.info("Tool filter: all tools")
-    return all_tools
+    selected, labels = [], []
+    if any(kw in tl for kw in settings.qbit_keyword_list):
+        selected += qbit_tools
+        labels.append("qBittorrent")
+    if any(kw in tl for kw in settings.jellyfin_keyword_list):
+        selected += jf_tools
+        labels.append("Jellyfin")
+    if any(kw in tl for kw in settings.acestream_keyword_list):
+        selected += acestream_tools
+        labels.append("AceStream")
+    if not selected:
+        logger.info("Tool filter: all tools")
+        return all_tools
+    logger.info("Tool filter: %s", " + ".join(labels))
+    return selected
 
 
 def _is_rate_limited(exc: Exception) -> bool:
@@ -170,23 +178,31 @@ async def _gemini_loop(chat_id: int, user_text: str) -> str:
             fn_parts = []
             for p in fn_calls:
                 fc = p.function_call
-                session = tool_to_session.get(fc.name)
-                if session is None:
-                    result_text = f"Tool '{fc.name}' is not available."
-                else:
+                local_fn = local_tool_dispatch.get(fc.name)
+                if local_fn is not None:
                     try:
-                        result = await session.call_tool(fc.name, dict(fc.args))
-                        result_text = "\n".join(
-                            c.text for c in result.content if hasattr(c, "text") and c.text
-                        ) or "(no output)"
-                    except MCPError as e:
-                        logger.exception("MCP tool call failed: %s", fc.name)
-                        if any(s in str(e) for s in ("Session terminated", "Connection closed")) and reconnect_event is not None:
-                            reconnect_event.set()
-                        result_text = f"Tool error [{e.error.code}]: {e.error.message}"
+                        result_text = local_fn(fc.name, dict(fc.args))
                     except Exception as e:
-                        logger.exception("MCP tool call failed: %s", fc.name)
+                        logger.exception("Local tool call failed: %s", fc.name)
                         result_text = f"Tool error [{type(e).__name__}]: {e}"
+                else:
+                    session = tool_to_session.get(fc.name)
+                    if session is None:
+                        result_text = f"Tool '{fc.name}' is not available."
+                    else:
+                        try:
+                            result = await session.call_tool(fc.name, dict(fc.args))
+                            result_text = "\n".join(
+                                c.text for c in result.content if hasattr(c, "text") and c.text
+                            ) or "(no output)"
+                        except MCPError as e:
+                            logger.exception("MCP tool call failed: %s", fc.name)
+                            if any(s in str(e) for s in ("Session terminated", "Connection closed")) and reconnect_event is not None:
+                                reconnect_event.set()
+                            result_text = f"Tool error [{e.error.code}]: {e.error.message}"
+                        except Exception as e:
+                            logger.exception("MCP tool call failed: %s", fc.name)
+                            result_text = f"Tool error [{type(e).__name__}]: {e}"
                 fn_parts.append(types.Part(
                     function_response=types.FunctionResponse(
                         name=fc.name, response={"result": result_text}
