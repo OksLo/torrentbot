@@ -65,14 +65,10 @@ The script is idempotent — it verifies and reapplies configuration on every co
 
 ```
 bot/
-  main.py              # entry point: MCP sessions, Gemini client, reconnect loop
+  main.py              # entry point: aiogram dispatcher, Telegram handlers, .torrent upload
+  assistant.py         # Gemini: system prompt, keyword routing, MCP sessions, model fallback + retry
+  history.py           # SQLite-backed per-chat conversation history
   config.py            # pydantic-settings; reads from env
-  smoke_test.py        # import-level smoke test run at container build
-  handlers/
-    ai.py              # all message handling: Gemini AI loop, tool dispatch, history
-  services/
-    qbittorrent.py     # async httpx client for qBittorrent Web API v2
-    history.py         # SQLite-backed per-chat conversation history
 
 setup/
   Dockerfile           # containerizes setup.py for GHCR publication
@@ -86,10 +82,16 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 
 ### Bot internals
 
-- `main.py` opens two persistent MCP sessions (SSE for qBittorrent, streamable HTTP for Jellyfin) and exposes their tools to the AI handler. On transport errors it tears down sessions and reconnects with 5-second backoff.
-- `ai.py` runs a Gemini `generate_content` loop per message, executing MCP tool calls until the model returns a final text response. Conversation history is persisted to SQLite and loaded on first message per chat.
-- Model fallback: `GEMINI_MODEL` accepts a comma-separated list in priority order. Rate-limited models (429 / RESOURCE_EXHAUSTED) are skipped in-process for 8 hours.
-- All Telegram replies go through `_safe_reply` to prevent `TelegramNetworkError` from crashing the handler.
+- Keep the code small and lean on libraries: google-genai runs the MCP tool loop, tenacity does retries, aiogram does per-chat locking. `httpx2` is the only HTTP client used directly (plain `httpx` is not a dependency).
+- `assistant.reply()` opens fresh MCP sessions per message (SSE for qBittorrent, streamable HTTP with bearer token for Jellyfin; 3 connect attempts, then an error reply) and passes the `ClientSession`s to a google-genai `AsyncChat` as `tools`. The SDK converts MCP schemas and executes tool calls (automatic function calling, max 10 calls). `_Session.__deepcopy__` exists because the SDK deep-copies its config and live sessions can't be copied.
+- Keyword routing: only the qBittorrent or only the Jellyfin MCP server is connected when only its keywords match; otherwise both.
+- Model fallback: `GEMINI_MODEL` accepts a comma-separated list in priority order. Any API error tries the next model; models that return 429 are skipped in-process for 8 hours.
+- Overload retry: if every model fails with a 5xx (e.g. 503 UNAVAILABLE), the whole model list is retried after 2, 4, 8, 16, 32, 60 s. Before the first wait the user gets a one-time "Gemini is overloaded" notice.
+- History: loaded from SQLite (last `HISTORY_LIMIT` rows) on every message; the new turns (user, tool calls/responses, model) are saved in one transaction only after a successful reply. Parts are (de)serialized with a pydantic `TypeAdapter`.
+- The Dispatcher uses `SimpleEventIsolation` + `FSMStrategy.CHAT`, so messages in one chat are handled one at a time (consistent history) while different chats run concurrently.
+- `.torrent` files bypass Gemini: `main._add_torrent` logs into the qBittorrent Web API and uploads the file with `httpx2`.
+- All Telegram replies go through `_safe_reply` to prevent `TelegramNetworkError` from crashing the handler. Error replies unwrap single-exception `ExceptionGroup`s raised by the MCP transports' anyio task groups.
+- CI smoke test: `pip check` plus `python -c "import main"` (with dummy secrets) inside the built image.
 
 ## Environment Variables
 
@@ -109,6 +111,8 @@ Makefile               # make targets; auto-detects GPU and applies overlay
 | `QBIT_MCP_URL` | no | qBittorrent MCP SSE URL (default: `http://qbittorrent-mcp:3000/sse`) |
 | `JELLYFIN_MCP_URL` | no | Jellyfin MCP URL (default: `http://jellyfin-mcp:8080/mcp`) |
 | `TZ` | no | Timezone (default: `Europe/London`) |
+
+Empty values (e.g. unset `${VAR}` passed through docker-compose) fall back to the defaults (`env_ignore_empty`).
 
 | `QBIT_BLKIO_DRIVE` | no | Drive node to throttle for qBittorrent blkio limits (default: `/dev/sda`) |
 | `QBIT_BLKIO_READ_BPS` | no | Byte-per-second read limit for blkio (default: `20971520` = 20 MiB/s) |

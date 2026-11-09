@@ -45,7 +45,7 @@ MCP_HTTP_TOKEN=change_me
 TZ=Europe/London
 ```
 
-Optionally set `GEMINI_MODEL` to a comma-separated list of models in priority order (e.g. `gemini-2.5-pro,gemini-2.5-flash`). The bot tries them in order and skips models that have hit their rate limit for 8 hours.
+Optionally set `GEMINI_MODEL` to a comma-separated list of models in priority order (e.g. `gemini-2.5-pro,gemini-2.5-flash`). The bot tries them in order and skips models that have hit their rate limit for 8 hours. If every model is temporarily overloaded (e.g. `503 UNAVAILABLE`), the bot tells you it is waiting and retries with exponential backoff for about 2 minutes before giving up. Listing more than one model makes this less likely.
 
 Optionally set `HISTORY_LIMIT` to control how many conversation turns are kept in SQLite and sent to the LLM (default: `20`).
 
@@ -67,7 +67,7 @@ make logs
 
 ## Usage
 
-Send your bot any natural language request — it uses Gemini AI with access to qBittorrent and Jellyfin tools. You can also send magnet links or `.torrent` files directly.
+Send your bot any natural language request — it uses Gemini AI with access to qBittorrent and Jellyfin tools. You can also send magnet links or `.torrent` files directly. Messages within one chat are answered in order, one at a time.
 
 Examples:
 - _"Show active downloads"_

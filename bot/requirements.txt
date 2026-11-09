@@ -1,5 +1,7 @@
-aiogram>=3.14.0,<4.0.0
-httpx==0.28.1
-pydantic-settings==2.3.0
-google-genai>=0.8.0
-mcp>=2.0.0,<3
+aiogram>=3.14,<4
+google-genai>=3,<4
+mcp>=2,<3
+pydantic-settings>=2.3,<3
+# versions constrained by google-genai / mcp, listed because the bot imports them directly
+httpx2
+tenacity

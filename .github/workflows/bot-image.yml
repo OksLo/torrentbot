@@ -57,8 +57,9 @@ jobs:
           IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed '/^[[:space:]]*$/d' | head -n1)
           echo "Testing image: $IMAGE"
           docker run --rm "$IMAGE" python -m pip check
-          docker run --rm "$IMAGE" python -m py_compile main.py handlers/ai.py
-          docker run --rm "$IMAGE" python smoke_test.py
+          # importing main loads every bot module and dependency; dummy secrets satisfy config
+          docker run --rm -e BOT_TOKEN=x -e QBIT_PASSWORD=x -e GEMINI_API_KEY=x -e MCP_HTTP_TOKEN=x \
+            "$IMAGE" python -c "import main"
 
       - name: Push image
         run: |

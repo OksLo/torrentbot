@@ -33,6 +33,9 @@ services:
       - DOWNLOAD_PATH=/downloads
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL}
+      - HISTORY_LIMIT=${HISTORY_LIMIT}
+      - QBIT_KEYWORDS=${QBIT_KEYWORDS}
+      - JELLYFIN_KEYWORDS=${JELLYFIN_KEYWORDS}
       - QBIT_MCP_URL=http://qbittorrent-mcp:3000/sse
       - JELLYFIN_MCP_URL=http://jellyfin-mcp:8080/mcp
       - MCP_HTTP_TOKEN=${MCP_HTTP_TOKEN}
