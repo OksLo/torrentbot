@@ -49,7 +49,7 @@ Optionally set `GEMINI_MODEL` to a comma-separated list of models in priority or
 
 Optionally set `HISTORY_LIMIT` to control how many conversation turns are kept in SQLite and sent to the LLM (default: `20`).
 
-Optionally set `QBIT_KEYWORDS` / `JELLYFIN_KEYWORDS` to comma-separated UTF-8 keyword lists that control which MCP tools are included in the LLM context per message. If only qBittorrent keywords are matched, only qBittorrent tools are sent; same for Jellyfin. If both or neither match, all tools are sent.
+Optionally set `QBIT_KEYWORDS` / `JELLYFIN_KEYWORDS` to comma-separated UTF-8 keyword lists that control which MCP tools are included in the LLM context per message. If only qBittorrent keywords are matched, only qBittorrent tools are sent; same for Jellyfin. If both or neither match, all tools are sent. If the model needs a tool that was left out (e.g. a torrent follow-up worded like a Jellyfin question), the bot automatically retries with all tools.
 
 **3. Start all services**
 

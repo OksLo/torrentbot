@@ -49,6 +49,7 @@ _jellyfin_http = httpx2.AsyncClient(
 )
 _blocked_until: dict[str, float] = {}  # model -> unix time its 429 block expires
 _BLOCK_SECONDS = 8 * 3600
+_ALL_SERVERS = ["qbit", "jellyfin"]
 
 
 def _drop_bool_schemas(schema):
@@ -86,7 +87,7 @@ def _servers_for(text: str) -> list[str]:
         return ["qbit"]
     if jellyfin and not qbit:
         return ["jellyfin"]
-    return ["qbit", "jellyfin"]
+    return _ALL_SERVERS
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(max=5), reraise=True)
@@ -118,24 +119,32 @@ async def _send(past: list[types.Content], text: str, config: types.GenerateCont
     raise error
 
 
-async def reply(chat_id: int, text: str, on_overloaded: Callable[[], Awaitable]) -> str:
-    async def notify_once(state):
-        if state.attempt_number == 1:
-            await on_overloaded()
-
-    past = history.load(chat_id)
+async def _ask(past: list[types.Content], text: str, servers: list[str], before_sleep):
     async with AsyncExitStack() as stack:
-        tools = [await _open(stack, server) for server in _servers_for(text)]
+        tools = [await _open(stack, server) for server in servers]
         config = types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, tools=tools)
         # 503 & co: retry all models after 2, 4, 8, 16, 32, 60 s (~2 min in total)
         async for attempt in AsyncRetrying(
             retry=retry_if_exception_type(errors.ServerError),
             wait=wait_exponential(multiplier=2, max=60),
             stop=stop_after_attempt(7),
-            before_sleep=notify_once,
+            before_sleep=before_sleep,
             reraise=True,
         ):
             with attempt:
-                chat, response = await _send(past, text, config)
+                return await _send(past, text, config)
+
+
+async def reply(chat_id: int, text: str, on_overloaded: Callable[[], Awaitable]) -> str:
+    async def notify_once(state):
+        if state.attempt_number == 1:
+            await on_overloaded()
+
+    past = history.load(chat_id)
+    try:
+        chat, response = await _ask(past, text, _servers_for(text), notify_once)
+    except* KeyError as e:  # the SDK's error for a call to a tool that isn't connected
+        logger.warning("Model called unconnected tool %s; retrying with all MCP servers", e.exceptions[0])
+        chat, response = await _ask(past, text, _ALL_SERVERS, notify_once)
     history.save(chat_id, chat.get_history()[len(past):])
     return response.text or "(no response)"
