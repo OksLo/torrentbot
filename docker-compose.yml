@@ -139,3 +139,19 @@ services:
       jellyfin:
         condition: service_healthy
     restart: on-failure
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8888:8080"
+    environment:
+      - TZ=${TZ:-Europe/London}
+    healthcheck:
+      test: ["CMD", "/dozzle", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

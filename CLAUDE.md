@@ -8,13 +8,14 @@ On every code change, update the relevant sections of `README.md` and `CLAUDE.md
 
 ## What This Project Does
 
-Five-service self-hosted media stack:
+Six-service self-hosted media stack:
 
 1. **Telegram bot** (`bot/`) — AI assistant powered by Google Gemini. Accepts natural language commands, magnet links, and `.torrent` files. Uses MCP tools to control qBittorrent and Jellyfin.
 2. **qBittorrent** — downloads torrents into `./downloads/`
 3. **Jellyfin** — media streaming server; optionally uses Intel GPU hardware transcoding via VA-API
 4. **Samba** — serves `./downloads/` over SMB to PCs. Its `-p` flag recursively chowns the share to `smbuser` on every start; `USERID`/`GROUPID=1000` keep that in sync with qBittorrent's `PUID`/`PGID` (the image default is 100:101)
 5. **Setup** — one-time first-boot configuration service
+6. **Dozzle** — read-only web UI for container status and live logs (port 8888). Mounts the Docker socket read-only; no login and actions disabled, so it can't start/stop containers
 
 All services run via Docker Compose. GPU passthrough is auto-detected at `make up` time.
 
@@ -35,7 +36,7 @@ cp .env.example .env   # fill in required variables
 make up
 ```
 
-qBittorrent Web UI is at `http://localhost:8080`. Jellyfin is at `http://localhost:8096`.
+qBittorrent Web UI is at `http://localhost:8080`. Jellyfin is at `http://localhost:8096`. Dozzle (container status + logs) is at `http://localhost:8888`.
 
 ## GPU Support
 

@@ -9,6 +9,7 @@ Self-hosted media stack: a Telegram AI assistant that accepts natural language c
 | qBittorrent Web UI | 8080 | Torrent client + management |
 | Jellyfin | 8096 | Media streaming (browser, TV apps) |
 | Samba | 445 | SMB file share for PCs |
+| Dozzle | 8888 | Container status + live logs (read-only) |
 | Telegram bot | — | AI assistant: natural language, magnet links, `.torrent` files |
 
 ## Prerequisites
@@ -84,6 +85,8 @@ make bot-logs     # tail bot logs only
 make restart-bot  # restart the bot container
 make upgrade      # pull latest images and recreate services
 ```
+
+For a web view of container status and live logs, open Dozzle at `http://<host>:8888`. It is read-only (no start/stop/restart buttons) and has no login, so keep the port on your LAN.
 
 ## GPU Hardware Transcoding (Intel)
 
