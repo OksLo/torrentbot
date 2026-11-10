@@ -51,10 +51,30 @@ _blocked_until: dict[str, float] = {}  # model -> unix time its 429 block expire
 _BLOCK_SECONDS = 8 * 3600
 
 
+def _drop_bool_schemas(schema):
+    """Drop boolean sub-schemas (e.g. "additionalProperties": false), which crash google-genai's MCP schema filter."""
+    if isinstance(schema, dict):
+        return {
+            key: _drop_bool_schemas(value)
+            for key, value in schema.items()
+            if not (key in ("items", "additionalProperties") and isinstance(value, bool))
+        }
+    if isinstance(schema, list):
+        return [_drop_bool_schemas(value) for value in schema]
+    return schema
+
+
 class _Session(ClientSession):
-    # google-genai deep-copies the request config; a live MCP session can't be copied, so share it
-    def __deepcopy__(self, memo):
+    """ClientSession with workarounds for google-genai's MCP support."""
+
+    def __deepcopy__(self, memo):  # the SDK deep-copies its config; a live session can't be copied
         return self
+
+    async def list_tools(self, **kwargs):
+        result = await super().list_tools(**kwargs)
+        for tool in result.tools:
+            tool.input_schema = _drop_bool_schemas(tool.input_schema)
+        return result
 
 
 def _servers_for(text: str) -> list[str]:
