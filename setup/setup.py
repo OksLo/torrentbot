@@ -312,7 +312,46 @@ def setup_jellyfin():
         print('  WARN: Could not create Jellyfin API key.')
 
     setup_jellyfin_hw_accel(token)
+    setup_jellyfin_livetv(token)
     return api_key
+
+
+# The bot writes AceStream channels here; Jellyfin mounts ./config/acestream at /acestream.
+ACESTREAM_PLAYLIST = '/config/acestream/channels.m3u'
+JELLYFIN_ACESTREAM_PLAYLIST = '/acestream/channels.m3u'
+
+
+def setup_jellyfin_livetv(token):
+    """Register the AceStream M3U playlist as a Jellyfin Live TV tuner (idempotent).
+
+    Live TV config docs: https://api.jellyfin.org/#tag/Configuration/operation/GetNamedConfiguration
+    Tuner host docs: https://api.jellyfin.org/#tag/LiveTv/operation/AddTunerHost
+    """
+    print('==> Configuring Jellyfin Live TV (AceStream)...')
+    # Jellyfin validates the playlist when the tuner is added, so it must exist first.
+    if not os.path.exists(ACESTREAM_PLAYLIST):
+        os.makedirs(os.path.dirname(ACESTREAM_PLAYLIST), exist_ok=True)
+        with open(ACESTREAM_PLAYLIST, 'w') as f:
+            f.write('#EXTM3U\n')
+
+    status, body = _jf('/System/Configuration/livetv', token=token)
+    if status != 200:
+        print(f'  WARN: Could not read Live TV config ({status}). Skipping.')
+        return
+    if any(h.get('Url') == JELLYFIN_ACESTREAM_PLAYLIST for h in json.loads(body).get('TunerHosts') or []):
+        print('  AceStream tuner already registered.')
+        return
+
+    status, body = _jf('/LiveTv/TunerHosts', {
+        'Type': 'm3u',
+        'Url': JELLYFIN_ACESTREAM_PLAYLIST,
+        'FriendlyName': 'AceStream',
+        'AllowHWTranscoding': True,
+    }, token=token)
+    if status == 200:
+        print('  AceStream tuner registered.')
+    else:
+        print(f'  WARN: Failed to register AceStream tuner ({status}): {body[:200]}')
 
 
 # Codecs supported for VA-API decode on Intel JasperLake (iHD driver, Gen11 LP).

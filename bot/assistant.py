@@ -11,6 +11,7 @@ from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 from tenacity import AsyncRetrying, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+import channels
 import history
 from config import settings
 
@@ -20,6 +21,9 @@ SYSTEM_PROMPT = (
     "You are a helpful assistant for a self-hosted media server. "
     "You can manage torrents via qBittorrent and browse/search media via Jellyfin. "
     "Be concise. When asked about downloads or media, use your available tools.\n\n"
+
+    "You also manage the AceStream live TV channels that Jellyfin shows under Live TV, "
+    "using the acestream_channel tools. Users may send acestream:// links or bare content ids.\n\n"
 
     "Format ALL responses as Telegram HTML (parse_mode=HTML). Supported tags only:\n"
     "- <b>bold</b> for labels, headings, torrent/media names\n"
@@ -121,7 +125,7 @@ async def _send(past: list[types.Content], text: str, config: types.GenerateCont
 
 async def _ask(past: list[types.Content], text: str, servers: list[str], before_sleep):
     async with AsyncExitStack() as stack:
-        tools = [await _open(stack, server) for server in servers]
+        tools = [await _open(stack, server) for server in servers] + channels.TOOLS
         config = types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, tools=tools)
         # 503 & co: retry all models after 2, 4, 8, 16, 32, 60 s (~2 min in total)
         async for attempt in AsyncRetrying(

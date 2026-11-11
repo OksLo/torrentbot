@@ -9,7 +9,8 @@ Self-hosted media stack: a Telegram AI assistant that accepts natural language c
 | qBittorrent Web UI | 8080 | Torrent client + management |
 | Jellyfin | 8096 | Media streaming (browser, TV apps) |
 | Samba | 445 | SMB file share for PCs |
-| Telegram bot | — | AI assistant: natural language, magnet links, `.torrent` files |
+| Telegram bot | — | AI assistant: natural language, magnet links, `.torrent` files, AceStream channels |
+| AceStream | — | AceStream engine; streams channels to Jellyfin Live TV (internal only) |
 
 ## Prerequisites
 
@@ -73,6 +74,16 @@ Examples:
 - _"Show active downloads"_
 - _"What's been added to Jellyfin recently?"_
 - _"Update the metadata for Inception"_
+
+## AceStream Live TV
+
+The bot keeps a list of AceStream channels, and Jellyfin shows them under **Live TV → Channels**, where you can watch them. Manage the list with plain messages:
+
+- _"Add channel Match TV acestream://0123456789abcdef0123456789abcdef01234567"_ (a bare 40-character content id works too; adding an existing name replaces it)
+- _"Show channels"_
+- _"Remove Match TV"_
+
+The list is stored as an M3U playlist in `config/acestream/channels.m3u`. Setup registers it in Jellyfin as a Live TV tuner on first boot, and after each change the bot asks Jellyfin to refresh its guide, so changes show up within seconds. Streams go through the `acestream` container (`martinbjeldbak/acestream-http-proxy`), which only runs on amd64 hosts.
 
 ## Useful Commands
 

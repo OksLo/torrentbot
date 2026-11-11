@@ -42,10 +42,23 @@ services:
     volumes:
       - ./downloads:/downloads
       - ./data:/data
+      - ./config:/config  # jellyfin.env (API key) + acestream/channels.m3u
     depends_on:
-      - qbittorrent
-      - qbittorrent-mcp
-      - jellyfin-mcp
+      qbittorrent:
+        condition: service_started
+      qbittorrent-mcp:
+        condition: service_started
+      jellyfin-mcp:
+        condition: service_started
+      acestream:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  acestream:
+    image: martinbjeldbak/acestream-http-proxy:latest
+    container_name: acestream
     restart: unless-stopped
 
   qbittorrent-mcp:
@@ -112,6 +125,7 @@ services:
     volumes:
       - ./config/jellyfin:/config
       - ./downloads:/media:ro
+      - ./config/acestream:/acestream:ro  # Live TV M3U tuner playlist, written by the bot
     ports:
       - "8096:8096"
     healthcheck:
