@@ -7,7 +7,8 @@ def _csv(value: str) -> list[str]:
 
 class Settings(BaseSettings):
     # empty ${VAR} values from docker-compose fall back to the defaults below
-    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
+    # /config/jellyfin.env (JELLYFIN_API_KEY) is written by the setup service; missing files are skipped
+    model_config = SettingsConfigDict(env_file=(".env", "/config/jellyfin.env"), env_ignore_empty=True)
 
     bot_token: str
     qbit_host: str = "http://qbittorrent:8080"
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     qbit_mcp_url: str = "http://qbittorrent-mcp:3000/sse"
     jellyfin_mcp_url: str = "http://jellyfin-mcp:8080/mcp"
     mcp_http_token: str
+    jellyfin_url: str = "http://jellyfin:8096"
+    jellyfin_api_key: str = ""
+    acestream_url: str = "http://acestream:6878"
+    acestream_playlist: str = "/config/acestream/channels.m3u"
 
     @property
     def gemini_models(self) -> list[str]:
